@@ -1,0 +1,17 @@
+services:
+  nagios:
+    build: .
+    image: nagios-core:4.5.14
+    container_name: nagios-core
+    ports:
+      - "8080:80"
+    environment:
+      NAGIOSADMIN_PASSWORD: "admin"
+    volumes:
+      - nagios-etc:/usr/local/nagios/etc
+      - nagios-var:/usr/local/nagios/var
+    restart: unless-stopped
+
+volumes:
+  nagios-etc:
+  nagios-var:
