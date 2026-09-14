@@ -17,9 +17,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libgd-dev libssl-dev libperl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN groupadd -g 1000 nagios \
-    && groupadd -g 1001 nagcmd \
-    && useradd -m -u 1000 -g nagios -G nagcmd -s /usr/sbin/nologin nagios \
+RUN groupadd -g 3000 nagios \
+    && groupadd -g 3001 nagcmd \
+    && useradd -m -u 3000 -g nagios -G nagcmd -s /usr/sbin/nologin nagios \
     && usermod -a -G nagcmd www-data
 
 WORKDIR /usr/src
@@ -73,9 +73,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         supervisor \
     && rm -rf /var/lib/apt/lists/*
 
-RUN groupadd -g 1000 nagios \
-    && groupadd -g 1001 nagcmd \
-    && useradd -m -u 1000 -g nagios -G nagcmd -s /usr/sbin/nologin nagios \
+RUN groupadd -g 3000 nagios \
+    && groupadd -g 3001 nagcmd \
+    && useradd -m -u 3000 -g nagios -G nagcmd -s /usr/sbin/nologin nagios \
     && usermod -a -G nagcmd www-data
 
 COPY --from=builder /usr/local/nagios /usr/local/nagios
