@@ -26,6 +26,8 @@ jobs:
         with:
           context: .
           push: true
+          provenance: false
+          sbom: false
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/nagios-core:4.5.14
             ${{ secrets.DOCKERHUB_USERNAME }}/nagios-core:latest
