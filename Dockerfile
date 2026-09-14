@@ -71,7 +71,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libgd3 libssl3 perl \
         iputils-ping dnsutils \
         supervisor \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -f /usr/bin/pebble
 
 RUN groupadd -g 3000 nagios \
     && groupadd -g 3001 nagcmd \
