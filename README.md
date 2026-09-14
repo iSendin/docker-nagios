@@ -1,6 +1,6 @@
 # Nagios Core Docker Image
 
-Imagen Docker de [Nagios Core](https://www.nagios.org/projects/nagios-core/) 4.5.14 con Nagios Plugins 2.5, compilados desde el código fuente oficial sobre Debian 12, con Apache + PHP para la interfaz web.
+Imagen Docker de [Nagios Core](https://www.nagios.org/projects/nagios-core/) 4.5.14 con Nagios Plugins 2.5, compilados desde el código fuente oficial sobre Ubuntu 26.04 LTS, con Apache + PHP para la interfaz web.
 
 ## Uso rápido
 
