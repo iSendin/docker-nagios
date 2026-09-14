@@ -5,7 +5,7 @@ ARG NAGIOS_PLUGINS_VERSION=2.5
 ########################################
 # Stage 1: build Nagios Core + Plugins
 ########################################
-FROM debian:12-slim AS builder
+FROM ubuntu:26.04 AS builder
 ARG NAGIOS_VERSION
 ARG NAGIOS_PLUGINS_VERSION
 ARG DEBIAN_FRONTEND=noninteractive
@@ -61,14 +61,14 @@ RUN ./configure \
 ########################################
 # Stage 2: runtime image
 ########################################
-FROM debian:12-slim
+FROM ubuntu:26.04
 ARG DEBIAN_FRONTEND=noninteractive
 LABEL org.opencontainers.image.title="Nagios Core" \
       org.opencontainers.image.source="https://github.com/NagiosEnterprises/nagioscore"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        apache2 php libapache2-mod-php php-gd \
-        libgd3 libssl3 libperl5.36 \
+        apache2 apache2-utils php libapache2-mod-php php-gd \
+        libgd3 libssl3 perl \
         iputils-ping dnsutils \
         supervisor \
     && rm -rf /var/lib/apt/lists/*
