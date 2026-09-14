@@ -29,3 +29,11 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/nagios-core:4.5.14
             ${{ secrets.DOCKERHUB_USERNAME }}/nagios-core:latest
+
+      - name: Update Docker Hub description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/nagios-core
+          readme-filepath: ./README.md
