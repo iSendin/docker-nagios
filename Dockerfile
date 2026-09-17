@@ -1,20 +1,30 @@
 # syntax=docker/dockerfile:1
 ARG NAGIOS_VERSION=4.5.14
 ARG NAGIOS_PLUGINS_VERSION=2.5
+ARG NRPE_VERSION=4.1.3
+ARG NSCA_VERSION=2.10.3
+ARG NCPA_VERSION=3.5.0
+ARG NAGIOSGRAPH_VERSION=1.4.4
+ARG NAGIOS_EXPORTER_VERSION=1.2.5
 
 ########################################
-# Stage 1: build Nagios Core + Plugins
+# Stage 1: build Nagios Core + Plugins + addons
 ########################################
 FROM ubuntu:26.04 AS builder
 ARG NAGIOS_VERSION
 ARG NAGIOS_PLUGINS_VERSION
+ARG NRPE_VERSION
+ARG NSCA_VERSION
+ARG NCPA_VERSION
+ARG NAGIOSGRAPH_VERSION
+ARG NAGIOS_EXPORTER_VERSION
 ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         wget ca-certificates \
         build-essential autoconf gettext bc unzip \
         apache2 apache2-utils \
-        libgd-dev libssl-dev libperl-dev \
+        libgd-dev libssl-dev libperl-dev libmcrypt-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd -g 3000 nagios \
@@ -58,6 +68,90 @@ RUN ./configure \
     && make \
     && make install
 
+# --- Build NRPE client plugin (check_nrpe only; the nrpe daemon runs on ---
+# --- the monitored hosts, not on this Nagios server image)             ---
+WORKDIR /usr/src
+RUN wget -qO nrpe.tar.gz \
+        "https://github.com/NagiosEnterprises/nrpe/releases/download/nrpe-${NRPE_VERSION}/nrpe-${NRPE_VERSION}.tar.gz" \
+    && tar xzf nrpe.tar.gz \
+    && rm nrpe.tar.gz
+
+WORKDIR /usr/src/nrpe-${NRPE_VERSION}
+RUN ./configure \
+        --with-pluginsdir=/usr/local/nagios/libexec \
+        --with-nagios-user=nagios \
+        --with-nagios-group=nagios \
+    && make check_nrpe \
+    && make install-plugin
+
+# --- Build NSCA server daemon (send_nsca is not needed here; it runs on ---
+# --- the monitored hosts that submit passive check results)            ---
+WORKDIR /usr/src
+RUN wget -qO nsca.tar.gz \
+        "https://github.com/NagiosEnterprises/nsca/releases/download/nsca-${NSCA_VERSION}/nsca-${NSCA_VERSION}.tar.gz" \
+    && tar xzf nsca.tar.gz \
+    && rm nsca.tar.gz
+
+WORKDIR /usr/src/nsca-${NSCA_VERSION}
+RUN ./configure \
+        --prefix=/usr/local/nagios \
+        --with-nsca-user=nagios \
+        --with-nsca-grp=nagios \
+        --with-nsca-port=5667 \
+    && make nsca \
+    && install -d /usr/local/nagios/bin \
+    && install -m 755 src/nsca /usr/local/nagios/bin/nsca \
+    && install -m 640 sample-config/nsca.cfg /usr/local/nagios/etc/nsca.cfg \
+    && install -m 640 sample-config/nsca.cfg /usr/local/nagios/nsca.cfg.dist
+
+# --- Fetch NCPA client plugin (check_ncpa.py only; the NCPA agent runs ---
+# --- on the monitored hosts, not on this Nagios server image)          ---
+RUN wget -qO /usr/local/nagios/libexec/check_ncpa.py \
+        "https://raw.githubusercontent.com/NagiosEnterprises/ncpa/v${NCPA_VERSION}/client/check_ncpa.py" \
+    && chmod 755 /usr/local/nagios/libexec/check_ncpa.py
+
+# --- Install nagiosgraph (RRD graphing/trending addon) ---
+WORKDIR /usr/src
+RUN wget -qO nagiosgraph.tar.gz \
+        "https://sourceforge.net/projects/nagiosgraph/files/nagiosgraph/${NAGIOSGRAPH_VERSION}/nagiosgraph-${NAGIOSGRAPH_VERSION}.tar.gz/download" \
+    && tar xzf nagiosgraph.tar.gz \
+    && rm nagiosgraph.tar.gz
+
+WORKDIR /usr/src/nagiosgraph-${NAGIOSGRAPH_VERSION}
+RUN install -d /usr/local/nagios/etc/nagiosgraph /usr/local/nagios/var/rrd \
+    && install -m 644 -t /usr/local/nagios/etc/nagiosgraph etc/* \
+    && install -m 644 -t /usr/local/nagios/share share/nagiosgraph.css share/nagiosgraph.js \
+    && sed -i "s#use lib '/opt/nagiosgraph/etc';#use lib '/usr/local/nagios/etc/nagiosgraph';#" \
+        lib/insert.pl cgi/*.cgi \
+    && install -m 755 lib/insert.pl /usr/local/nagios/libexec/insert.pl \
+    && install -m 755 -t /usr/local/nagios/sbin cgi/*.cgi \
+    && sed -i \
+        -e "s#^logfile[[:space:]]*=.*#logfile = /usr/local/nagios/var/nagiosgraph.log#" \
+        -e "s#^cgilogfile[[:space:]]*=.*#cgilogfile = /usr/local/nagios/var/nagiosgraph-cgi.log#" \
+        -e "s#^perflog[[:space:]]*=.*#perflog = /usr/local/nagios/var/perfdata.log#" \
+        -e "s#^rrddir[[:space:]]*=.*#rrddir = /usr/local/nagios/var/rrd#" \
+        -e "s#^mapfile[[:space:]]*=.*#mapfile = /usr/local/nagios/etc/nagiosgraph/map#" \
+        -e "s#^nagiosgraphcgiurl[[:space:]]*=.*#nagiosgraphcgiurl = /nagios/cgi-bin#" \
+        -e "s#^javascript[[:space:]]*=.*#javascript = /nagios/nagiosgraph.js#" \
+        -e "s#^stylesheet[[:space:]]*=.*#stylesheet = /nagios/nagiosgraph.css#" \
+        /usr/local/nagios/etc/nagiosgraph/nagiosgraph.conf
+
+# Nagios command definition for nagiosgraph, kept outside the /usr/local/nagios/etc
+# volume so the entrypoint can seed it into objects/ on first boot or upgrade.
+# Named process-service-perfdata-file (not process-service-perfdata) because
+# commands.cfg already defines a command called process-service-perfdata.
+RUN printf 'define command {\n    command_name  process-service-perfdata-file\n    command_line  /usr/local/nagios/libexec/insert.pl\n}\n' \
+        > /usr/local/nagios/nagiosgraph-command.cfg.dist
+
+# --- Fetch Prometheus exporter for Nagios (static binary, exposes ---
+# --- metrics from the nagiostats CLI on :9927/metrics)             ---
+WORKDIR /usr/src
+RUN wget -qO nagios_exporter.tar.gz \
+        "https://github.com/linode-obs/nagios_exporter/releases/download/v${NAGIOS_EXPORTER_VERSION}/nagios_exporter_Linux_x86_64.tar.gz" \
+    && tar xzf nagios_exporter.tar.gz nagios_exporter \
+    && install -m 755 nagios_exporter /usr/local/nagios/bin/nagios_exporter \
+    && rm -f nagios_exporter.tar.gz nagios_exporter
+
 ########################################
 # Stage 2: runtime image
 ########################################
@@ -70,6 +164,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         apache2 apache2-utils php libapache2-mod-php php-gd \
         libgd3 libssl3 perl \
         iputils-ping dnsutils \
+        libmcrypt4 python3 \
+        librrds-perl libgd-gd2-perl libcgi-pm-perl rrdtool \
         supervisor \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /usr/bin/pebble
@@ -92,7 +188,7 @@ COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 VOLUME ["/usr/local/nagios/etc", "/usr/local/nagios/var"]
-EXPOSE 80
+EXPOSE 80 5667 9927
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/conf.d/nagios.conf"]

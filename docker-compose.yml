@@ -5,8 +5,11 @@ services:
     container_name: nagios-core
     ports:
       - "8080:80"
+      - "5667:5667"
+      - "9927:9927"
     environment:
       NAGIOSADMIN_PASSWORD: "admin"
+      NSCA_PASSWORD: "nsca"
     volumes:
       - nagios-etc:/usr/local/nagios/etc
       - nagios-var:/usr/local/nagios/var
