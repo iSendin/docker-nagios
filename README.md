@@ -83,6 +83,8 @@ Si quieres enlaces en el menú lateral o el icono de acción de Nagios sustituid
 
 Expone en `http://localhost:9927/metrics` métricas sobre el propio Nagios (hosts/servicios activos, pasivos, en downtime, flapping, etc.), leyendo el binario `nagiostats` incluido en la imagen. No expone los resultados de cada chequeo individual como métricas — para eso hace falta un exporter distinto por tipo de recurso monitorizado.
 
+Se compila desde el código fuente del proyecto con un toolchain de Go actual (`GO_VERSION`, ver más abajo) en lugar de usar el binario ya compilado que publica el proyecto — así el binario final queda enlazado contra una librería estándar de Go sin CVEs conocidos, en vez de heredar la versión de Go que tuviera el mantenedor upstream al generar esa release.
+
 Ejemplo de scrape config de Prometheus:
 
 ```yaml
@@ -125,7 +127,7 @@ volumes:
 
 Imagen construida y publicada automáticamente mediante GitHub Actions a partir de este repositorio.
 
-Las versiones de cada componente se controlan mediante `ARG` en el `Dockerfile` (`NAGIOS_VERSION`, `NAGIOS_PLUGINS_VERSION`, `NRPE_VERSION`, `NSCA_VERSION`, `NCPA_VERSION`, `NAGIOSGRAPH_VERSION`, `NAGIOS_EXPORTER_VERSION`), por lo que se pueden sobreescribir en el build sin tocar el resto del código:
+Las versiones de cada componente se controlan mediante `ARG` en el `Dockerfile` (`NAGIOS_VERSION`, `NAGIOS_PLUGINS_VERSION`, `NRPE_VERSION`, `NSCA_VERSION`, `NCPA_VERSION`, `NAGIOSGRAPH_VERSION`, `NAGIOS_EXPORTER_VERSION`, `GO_VERSION`), por lo que se pueden sobreescribir en el build sin tocar el resto del código:
 
 ```bash
 docker build --build-arg NRPE_VERSION=4.1.3 -t nagios-core .

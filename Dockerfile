@@ -6,6 +6,7 @@ ARG NSCA_VERSION=2.10.3
 ARG NCPA_VERSION=3.5.0
 ARG NAGIOSGRAPH_VERSION=1.4.4
 ARG NAGIOS_EXPORTER_VERSION=1.2.5
+ARG GO_VERSION=1.27.1
 
 ########################################
 # Stage 1: build Nagios Core + Plugins + addons
@@ -18,6 +19,7 @@ ARG NSCA_VERSION
 ARG NCPA_VERSION
 ARG NAGIOSGRAPH_VERSION
 ARG NAGIOS_EXPORTER_VERSION
+ARG GO_VERSION
 ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -143,14 +145,24 @@ RUN install -d /usr/local/nagios/etc/nagiosgraph /usr/local/nagios/var/rrd \
 RUN printf 'define command {\n    command_name  process-service-perfdata-file\n    command_line  /usr/local/nagios/libexec/insert.pl\n}\n' \
         > /usr/local/nagios/nagiosgraph-command.cfg.dist
 
-# --- Fetch Prometheus exporter for Nagios (static binary, exposes ---
-# --- metrics from the nagiostats CLI on :9927/metrics)             ---
+# --- Build Prometheus exporter for Nagios from source. Built here (rather ---
+# --- than using upstream's prebuilt release binary) so it links against a ---
+# --- current Go toolchain/stdlib instead of whatever old Go the upstream  ---
+# --- maintainer happened to have locally when they cut that release.     ---
 WORKDIR /usr/src
+RUN wget -qO go.tar.gz "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
+    && tar -C /usr/local -xzf go.tar.gz \
+    && rm go.tar.gz
+
 RUN wget -qO nagios_exporter.tar.gz \
-        "https://github.com/linode-obs/nagios_exporter/releases/download/v${NAGIOS_EXPORTER_VERSION}/nagios_exporter_Linux_x86_64.tar.gz" \
-    && tar xzf nagios_exporter.tar.gz nagios_exporter \
-    && install -m 755 nagios_exporter /usr/local/nagios/bin/nagios_exporter \
-    && rm -f nagios_exporter.tar.gz nagios_exporter
+        "https://github.com/linode-obs/nagios_exporter/archive/refs/tags/v${NAGIOS_EXPORTER_VERSION}.tar.gz" \
+    && tar xzf nagios_exporter.tar.gz \
+    && rm nagios_exporter.tar.gz
+
+WORKDIR /usr/src/nagios_exporter-${NAGIOS_EXPORTER_VERSION}
+RUN PATH="/usr/local/go/bin:${PATH}" GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+        go build -trimpath -ldflags="-s -w -X main.Version=${NAGIOS_EXPORTER_VERSION}" \
+        -o /usr/local/nagios/bin/nagios_exporter nagios_exporter.go
 
 ########################################
 # Stage 2: runtime image
