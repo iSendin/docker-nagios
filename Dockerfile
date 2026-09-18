@@ -160,6 +160,14 @@ RUN wget -qO nagios_exporter.tar.gz \
     && rm nagios_exporter.tar.gz
 
 WORKDIR /usr/src/nagios_exporter-${NAGIOS_EXPORTER_VERSION}
+# go.mod pins golang.org/x/net, logrus and protobuf to 2022/2023 releases with
+# known CVEs; bump them to current patched versions before building (all are
+# v0/v1 modules under Go's compatibility promise, so this is a safe upgrade).
+RUN PATH="/usr/local/go/bin:${PATH}" go get -u \
+        golang.org/x/net \
+        github.com/sirupsen/logrus \
+        google.golang.org/protobuf \
+    && PATH="/usr/local/go/bin:${PATH}" go mod tidy
 RUN PATH="/usr/local/go/bin:${PATH}" GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
         go build -trimpath -ldflags="-s -w -X main.Version=${NAGIOS_EXPORTER_VERSION}" \
         -o /usr/local/nagios/bin/nagios_exporter nagios_exporter.go
